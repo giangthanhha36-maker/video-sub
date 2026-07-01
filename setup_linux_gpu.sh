@@ -38,9 +38,52 @@ fi
 echo "[OK] GPU:"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
-# --- Kiem tra conda ---
+# --- Kich hoat conda (shell chay script khong load .bashrc nen conda thuong khong co trong PATH) ---
 if ! command -v conda &>/dev/null; then
-    echo "[LOI] Chua cai conda. Cai Miniconda truoc:"
+    for _conda_sh in \
+        "${CONDA_EXE:+$(dirname "$(dirname "$CONDA_EXE")")/etc/profile.d/conda.sh}" \
+        "$HOME/miniconda3/etc/profile.d/conda.sh" \
+        "$HOME/anaconda3/etc/profile.d/conda.sh" \
+        "/opt/conda/etc/profile.d/conda.sh" \
+        "/opt/miniconda3/etc/profile.d/conda.sh" \
+        "/usr/local/miniconda3/etc/profile.d/conda.sh"
+    do
+        if [ -n "$_conda_sh" ] && [ -f "$_conda_sh" ]; then
+            # shellcheck source=/dev/null
+            source "$_conda_sh"
+            break
+        fi
+    done
+    unset _conda_sh
+fi
+# Fallback: them thu muc bin conda vao PATH neu chua source duoc conda.sh
+if ! command -v conda &>/dev/null; then
+    for _conda_bin in \
+        "$HOME/miniconda3/bin" \
+        "$HOME/anaconda3/bin" \
+        "/opt/conda/bin" \
+        "/opt/miniconda3/bin" \
+        "/usr/local/miniconda3/bin"
+    do
+        if [ -x "${_conda_bin}/conda" ]; then
+            export PATH="${_conda_bin}:${PATH}"
+            break
+        fi
+    done
+    unset _conda_bin
+fi
+
+# --- Kiem tra conda ---
+# if ! command -v conda &>/dev/null; then
+#     echo "[LOI] Chua cai conda. Cai Miniconda truoc:"
+#     echo "  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+#     echo "  bash Miniconda3-latest-Linux-x86_64.sh"
+#     exit 1
+# fi
+if ! command -v conda &>/dev/null; then
+    echo "[LOI] Khong tim thay conda trong PATH."
+    echo "      Neu da cai Miniconda, thu: source ~/miniconda3/etc/profile.d/conda.sh"
+    echo "      Neu chua cai, chay:"
     echo "  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
     echo "  bash Miniconda3-latest-Linux-x86_64.sh"
     exit 1
@@ -88,6 +131,8 @@ conda activate ste
 
 echo ">>> Cai setuptools + Cython (tranh loi zlib/Cython hong khi import paddle)..."
 pip install --no-cache-dir "setuptools>=69,<76" "Cython>=3.0,<4"
+# Paddle 2.6 + paddle.utils.run_check() chua tuong thich numpy 2.x (loi __array__(copy=True)).
+pip install --no-cache-dir --force-reinstall "numpy==1.26.4"
 
 echo ">>> Cai PyTorch + PaddlePaddle (GPU)..."
 if [ "$USE_CASE_B" -eq 1 ]; then
@@ -121,6 +166,8 @@ python -c "import torch; print('[OK] torch', torch.__version__, 'cuda', torch.cu
 echo ">>> Cai requirements chinh + UI (da ghim phien ban Gradio/UI)..."
 pip install --no-cache-dir -r requirements.txt
 pip install --no-cache-dir -r requirements-ui.txt
+# requirements-ui co the keo numpy 2.x — ha xuong 1.26.4 truoc khi chay app.
+pip install --no-cache-dir --force-reinstall "numpy==1.26.4"
 
 echo ">>> Kiem tra Gradio UI..."
 python -c "import gradio; print('[OK] gradio', gradio.__version__)"

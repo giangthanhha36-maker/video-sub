@@ -9,10 +9,28 @@
 #   - LD_LIBRARY_PATH can tro toi nvidia/cudnn/lib va torch/lib
 # ===========================================================================
 
+# Kiem tra da conda activate env ste chua (CONDA_PREFIX phai co gia tri).
+ste_gpu_require_ste_env() {
+    local prefix="${1:-${CONDA_PREFIX:-}}"
+    if [ -z "$prefix" ]; then
+        echo "[LOI] Chua kich hoat moi truong conda 'ste' (CONDA_PREFIX trong)." >&2
+        echo "      Hay chay day du:" >&2
+        echo "        source \"\$(conda info --base)/etc/profile.d/conda.sh\"" >&2
+        echo "        conda activate ste" >&2
+        echo "        source scripts/ste_gpu_env.sh" >&2
+        echo "        ste_gpu_prepare_env && ste_gpu_verify_paddle" >&2
+        return 1
+    fi
+    if [ "${CONDA_DEFAULT_ENV:-}" != "ste" ] && [ "$(basename "$prefix")" != "ste" ]; then
+        echo "[CANH BAO] Dang o moi truong '${CONDA_DEFAULT_ENV:-$(basename "$prefix")}', khong phai 'ste'." >&2
+    fi
+    return 0
+}
+
 ste_gpu_site_packages() {
     local prefix="${1:-${CONDA_PREFIX:-}}"
     if [ -z "$prefix" ]; then
-        echo "[LOI] ste_gpu_site_packages: CONDA_PREFIX trong." >&2
+        echo "[LOI] ste_gpu_site_packages: CONDA_PREFIX trong — chua 'conda activate ste'." >&2
         return 1
     fi
     local pyver
@@ -104,12 +122,19 @@ ste_gpu_export_ld() {
 # Goi day du: link + export LD. Tham so 1: CONDA_PREFIX (mac dinh $CONDA_PREFIX).
 ste_gpu_prepare_env() {
     local prefix="${1:-${CONDA_PREFIX:-}}"
+    ste_gpu_require_ste_env "$prefix" || return 1
     ste_gpu_link_cudnn "$prefix"
     ste_gpu_export_ld "$prefix"
 }
 
 # Kiem tra Paddle GPU (tra ve 0 neu thanh cong).
 ste_gpu_verify_paddle() {
-    ste_gpu_prepare_env "$1"
-    python -c "import paddle; paddle.utils.run_check()"
+    local prefix="${1:-${CONDA_PREFIX:-}}"
+    ste_gpu_require_ste_env "$prefix" || return 1
+    ste_gpu_prepare_env "$prefix"
+    # python -c "import paddle; paddle.utils.run_check()"
+    local _verify_script
+    _verify_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify_paddle_gpu.py"
+    python "$_verify_script"
+    unset _verify_script
 }

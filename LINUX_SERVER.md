@@ -65,6 +65,9 @@ chmod +x setup_linux_gpu.sh run_ui.sh run_omnivoice.sh start_linux.sh stop_linux
 ./setup_linux_gpu.sh
 ```
 
+source ~/miniconda3/etc/profile.d/conda.sh   # đổi path nếu cần
+./setup_linux_gpu.sh
+
 Script `setup_linux_gpu.sh` tự tạo 2 môi trường conda và **ghim phiên bản** Gradio/Paddle/cuDNN để tránh lỗi thường gặp trên Docker.
 
 | Môi trường | Python | Vai trò |
