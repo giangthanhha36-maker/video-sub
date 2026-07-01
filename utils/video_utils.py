@@ -1,10 +1,20 @@
 import glob
 import os
 import subprocess
-from typing import List
+from typing import Dict, List, Optional
 
 TEMP_VIDEO_FILE = "tmp.mp4"
 TEMP_FRAME_FORMAT = "png"
+
+
+def _ffmpeg_subprocess_env() -> Optional[Dict[str, str]]:
+    """
+    ffprobe/ffmpeg he thong (apt) bi loi neu keo lib conda (libncurses...) qua LD_LIBRARY_PATH.
+    Goi subprocess voi env da bo LD_LIBRARY_PATH.
+    """
+    env = os.environ.copy()
+    env.pop("LD_LIBRARY_PATH", None)
+    return env
 
 
 def run_ffmpeg(args: List[str]) -> bool:
@@ -20,7 +30,9 @@ def run_ffmpeg(args: List[str]) -> bool:
     commands = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
     commands.extend(args)
     try:
-        subprocess.check_output(commands, stderr=subprocess.STDOUT)
+        subprocess.check_output(
+            commands, stderr=subprocess.STDOUT, env=_ffmpeg_subprocess_env()
+        )
         return True
     except Exception as e:
         print(str(e))
@@ -53,7 +65,11 @@ def detect_fps(target_path: str) -> float:
         "default=noprint_wrappers=1:nokey=1",
         target_path,
     ]
-    output = subprocess.check_output(command).decode().strip().split("/")
+    output = subprocess.check_output(
+        command,
+        stderr=subprocess.DEVNULL,
+        env=_ffmpeg_subprocess_env(),
+    ).decode().strip().split("/")
     try:
         numerator, denominator = map(int, output)
         return numerator / denominator

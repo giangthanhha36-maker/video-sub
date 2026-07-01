@@ -39,6 +39,11 @@ fi
 
 conda activate ste
 
+# Paddle GPU (OCR): link libcudnn + LD_LIBRARY_PATH (Docker/Linux headless).
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/scripts/ste_gpu_env.sh"
+ste_gpu_prepare_env
+
 echo "=========================================="
 echo " SubErase UI (app.py)"
 echo " Cong: ${GRADIO_PORT}"

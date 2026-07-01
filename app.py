@@ -18,7 +18,9 @@ hoac dung run_ui.bat tren Windows.
 
 import copy
 import os
+import queue
 import shutil
+import threading
 import traceback
 from datetime import datetime
 
@@ -86,210 +88,326 @@ def process_video(
     """
     Ham xu ly chinh, la mot generator de cap nhat tien do len giao dien.
 
-    Moi lan `yield` se cap nhat 3 o dau ra: (nhat ky, video ket qua, link Drive).
+    Pipeline chay trong thread rieng; moi lan emit() day trang thai len UI ngay
+    (khong doi het ca buoc OCR/STTN moi cap nhat nhat ky).
+    Moi lan yield se cap nhat 3 o dau ra: (nhat ky, video ket qua, link Drive).
     """
     log_lines = []
+    log_lock = threading.Lock()
+    drive_links = []
+    update_q = queue.Queue()
+    state = {"video": None}
 
     def log(msg):
         """Ghi them mot dong vao nhat ky va tra ve chuoi day du."""
         stamp = datetime.now().strftime("%H:%M:%S")
-        log_lines.append(f"[{stamp}] {msg}")
-        return "\n".join(log_lines)
-
-    # --- Kiem tra dau vao bat buoc ---
-    if not video_path:
-        yield log("Loi: chua chon video."), None, ""
-        return
-    if not api_key or not api_key.strip():
-        yield log("Loi: chua nhap API key o tab 'Cai dat'."), None, ""
-        return
-
-    try:
-        # --- Import muon (lazy) de giao dien khoi dong nhanh, tranh loi env luc mo trang ---
-        from modules.config import load_config  # noqa: F401 (giu de tham khao)
-        from modules.embed import embed_subtitles
-        from modules.erase import remove_subtitles
-        from modules.ocr import extract_subtitles
-        from modules.subtitle import get_subtitles
-        from modules.translate import translate_subtitles
-        from utils import llm_utils
-        from utils.video_utils import (
-            create_video,
-            detect_fps,
-            extract_frames,
-            get_temp_directory_path,
-            get_temp_frame_paths,
-        )
-
-        # CODE MỚI: import muộn cho bước lồng tiếng (chỉ cần khi dub_enable=True).
-        from modules import tts_client
-        from utils.audio_utils import mix_and_mux
-
-        # --- Chuan bi thu muc lam viec rieng cho lan chay nay ---
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = os.path.splitext(os.path.basename(video_path))[0]
-        work_dir = os.path.join("output", f"{base_name}_{timestamp}")
-        os.makedirs(work_dir, exist_ok=True)
-
-        ext = os.path.splitext(video_path)[1] or ".mp4"
-        local_video = os.path.join(work_dir, base_name + ext)
-        shutil.copy(video_path, local_video)
-        yield log(f"Da copy video vao: {local_video}"), None, ""
-
-        # --- Lay config goc va ghi de bang thong so tu giao dien ---
-        config = copy.deepcopy(_load_base_config())
-        config["translation"]["api_key"] = api_key.strip()
-        if api_base_url and api_base_url.strip():
-            config["translation"]["api_base_url"] = api_base_url.strip()
-        if model and model.strip():
-            config["translation"]["model"] = model.strip()
-
-        config["erase"]["mask_expand"] = int(mask_expand)
-        config["subtitle"]["font_size"] = int(font_size)
-        config["subtitle"]["font_color"] = font_color
-        config["subtitle"]["position"] = float(position)
-        config["output"]["target_size"] = int(target_size)
-        config["video"]["min_duration"] = float(min_duration)
-
-        # Cho phep cac module dung chung (translate) lay dung API key/model luc chay
-        llm_utils.set_runtime(
-            api_key=api_key.strip(),
-            api_base_url=config["translation"]["api_base_url"],
-            model=config["translation"]["model"],
-        )
-
-        # --- Chuan bi Google Drive (neu bat) ---
-        drive_service = None
-        drive_job_folder = ""
-        drive_links = []
-        if drive_enable:
-            if sa_file:
-                try:
-                    from modules import drive as drive_mod
-
-                    drive_service = drive_mod.build_service(sa_file)
-                    drive_job_folder = drive_mod.ensure_job_folder(
-                        drive_service,
-                        (drive_folder_id or "").strip(),
-                        base_name,
-                    )
-                    yield log("Da ket noi Google Drive, tao thu muc job xong."), None, ""
-                except Exception as e:
-                    drive_service = None
-                    yield log(f"Canh bao: khong ket noi duoc Drive ({e}). Bo qua upload."), None, ""
-            else:
-                yield log("Canh bao: bat Drive nhung chua tai file Service Account JSON. Bo qua upload."), None, ""
-
-        def upload_if_enabled(local_path):
-            """Upload mot file len Drive neu da bat, va ghi link vao danh sach."""
-            if drive_service and local_path and os.path.exists(local_path):
-                try:
-                    from modules import drive as drive_mod
-
-                    info = drive_mod.upload_file(drive_service, local_path, drive_job_folder)
-                    link = info.get("link") or info.get("id")
-                    drive_links.append(f"- [{info['name']}]({link})")
-                    return log(f"Da upload len Drive: {info['name']}")
-                except Exception as e:
-                    return log(f"Loi upload Drive ({os.path.basename(local_path)}): {e}")
+        with log_lock:
+            log_lines.append(f"[{stamp}] {msg}")
             return "\n".join(log_lines)
 
-        def links_md():
-            if not drive_links:
-                return ""
-            return "### File tren Google Drive\n" + "\n".join(drive_links)
+    def links_md():
+        if not drive_links:
+            return ""
+        return "### File tren Google Drive\n" + "\n".join(drive_links)
 
-        # ===================== BAT DAU PIPELINE =====================
-        file_name = os.path.join(work_dir, base_name)
-
-        fps = detect_fps(local_video)
-        yield log(f"FPS phat hien: {fps}"), None, links_md()
-
-        yield log("Buoc 1/6: tach khung hinh tu video..."), None, links_md()
-        extract_frames(local_video, fps)
-        temp_directory_path = get_temp_directory_path(local_video)
-        frame_paths = get_temp_frame_paths(temp_directory_path)
-        yield log(f"Da tach {len(frame_paths)} khung hinh."), None, links_md()
-
-        yield log("Buoc 2/6: OCR nhan dien phu de..."), None, links_md()
-        ocr_result, y_center = extract_subtitles(frame_paths, config, fps)
-
-        yield log("Buoc 3/6: tao file phu de goc (.srt)..."), None, links_md()
-        srt_path = get_subtitles(ocr_result, config, fps, file_name)
-        yield upload_if_enabled(srt_path), None, links_md()
-
-        yield log("Buoc 4/6: xoa phu de goc khoi video (STTN)..."), None, links_md()
-        remove_subtitles(ocr_result, fps, len(frame_paths), config)
-        output_path = f"{file_name}_output{ext}"
-        create_video(local_video, output_path, fps)
-        yield upload_if_enabled(output_path), None, links_md()
-
-        yield log("Buoc 5/6: dich phu de (co the mat vai phut)..."), None, links_md()
-        srt_lang_path = translate_subtitles(
-            srt_path, target_language, source_lang=source_language
+    def emit(video=None):
+        if video is not None:
+            state["video"] = video
+        with log_lock:
+            status = "\n".join(log_lines)
+        update_q.put(
+            {
+                "status": status,
+                "video": state["video"],
+                "links": links_md(),
+            }
         )
-        yield upload_if_enabled(srt_lang_path), None, links_md()
 
-        yield log("Buoc 6/7: chen phu de da dich vao video..."), None, links_md()
-        output_file = f"{file_name}_{target_language}{ext}"
-        embed_subtitles(output_path, srt_lang_path, y_center, output_file, config)
-        yield upload_if_enabled(output_file), None, links_md()
+    def on_progress(done, total, phase):
+        pct = (100 * done // total) if total else 0
+        log(f"  >> {phase}: {done}/{total} ({pct}%)")
+        emit()
 
-        # ===================== CODE MỚI: BƯỚC LỒNG TIẾNG =====================
-        # Video kết quả mặc định = video đã cháy phụ đề (còn tiếng gốc).
-        final_output = output_file
-        if dub_enable:
+    def worker():
+        try:
+            _run_pipeline(
+                video_path=video_path,
+                target_language=target_language,
+                source_language=source_language,
+                api_key=api_key,
+                api_base_url=api_base_url,
+                model=model,
+                sa_file=sa_file,
+                drive_folder_id=drive_folder_id,
+                drive_enable=drive_enable,
+                mask_expand=mask_expand,
+                font_size=font_size,
+                font_color=font_color,
+                position=position,
+                target_size=target_size,
+                min_duration=min_duration,
+                delete_temp=delete_temp,
+                dub_enable=dub_enable,
+                ref_audio=ref_audio,
+                ref_text=ref_text,
+                omnivoice_url=omnivoice_url,
+                orig_gain=orig_gain,
+                tts_gain=tts_gain,
+                dub_num_step=dub_num_step,
+                dub_max_speed=dub_max_speed,
+                log=log,
+                emit=emit,
+                drive_links=drive_links,
+                on_progress=on_progress,
+            )
+        except Exception as e:
+            err = traceback.format_exc()
+            log(f"Loi: {e}\n{err}")
+            emit()
+        finally:
+            update_q.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    last = {"status": "", "video": None, "links": ""}
+    while True:
+        try:
+            item = update_q.get(timeout=0.5)
+        except queue.Empty:
+            # Heartbeat: giu ket noi SSE, UI van refresh khi dang cho buoc dai
+            yield last["status"], last["video"], last["links"]
+            continue
+        if item is None:
+            break
+        last = item
+        yield item["status"], item["video"], item["links"]
+
+
+def _run_pipeline(
+    *,
+    video_path,
+    target_language,
+    source_language,
+    api_key,
+    api_base_url,
+    model,
+    sa_file,
+    drive_folder_id,
+    drive_enable,
+    mask_expand,
+    font_size,
+    font_color,
+    position,
+    target_size,
+    min_duration,
+    delete_temp,
+    dub_enable,
+    ref_audio,
+    ref_text,
+    omnivoice_url,
+    orig_gain,
+    tts_gain,
+    dub_num_step,
+    dub_max_speed,
+    log,
+    emit,
+    drive_links,
+    on_progress,
+):
+    """Phan xu ly video (chay trong thread). Goi log() + emit() thay vi yield."""
+    if not video_path:
+        log("Loi: chua chon video.")
+        emit()
+        return
+    if not api_key or not api_key.strip():
+        log("Loi: chua nhap API key o tab 'Cai dat'.")
+        emit()
+        return
+
+    from modules.embed import embed_subtitles
+    from modules.erase import remove_subtitles
+    from modules.ocr import extract_subtitles
+    from modules.subtitle import get_subtitles
+    from modules.translate import translate_subtitles
+    from utils import llm_utils
+    from utils.video_utils import (
+        create_video,
+        detect_fps,
+        extract_frames,
+        get_temp_directory_path,
+        get_temp_frame_paths,
+    )
+    from modules import tts_client
+    from utils.audio_utils import mix_and_mux
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_name = os.path.splitext(os.path.basename(video_path))[0]
+    work_dir = os.path.join("output", f"{base_name}_{timestamp}")
+    os.makedirs(work_dir, exist_ok=True)
+
+    ext = os.path.splitext(video_path)[1] or ".mp4"
+    local_video = os.path.join(work_dir, base_name + ext)
+    shutil.copy(video_path, local_video)
+    log(f"Da copy video vao: {local_video}")
+    emit()
+
+    config = copy.deepcopy(_load_base_config())
+    config["translation"]["api_key"] = api_key.strip()
+    if api_base_url and api_base_url.strip():
+        config["translation"]["api_base_url"] = api_base_url.strip()
+    if model and model.strip():
+        config["translation"]["model"] = model.strip()
+
+    config["erase"]["mask_expand"] = int(mask_expand)
+    config["subtitle"]["font_size"] = int(font_size)
+    config["subtitle"]["font_color"] = font_color
+    config["subtitle"]["position"] = float(position)
+    config["output"]["target_size"] = int(target_size)
+    config["video"]["min_duration"] = float(min_duration)
+
+    llm_utils.set_runtime(
+        api_key=api_key.strip(),
+        api_base_url=config["translation"]["api_base_url"],
+        model=config["translation"]["model"],
+    )
+
+    drive_service = None
+    drive_job_folder = ""
+    if drive_enable:
+        if sa_file:
             try:
-                yield log(
-                    "Buoc 7/7: tao giong long tieng bang OmniVoice "
-                    f"(service: {omnivoice_url})..."
-                ), None, links_md()
-                tts_wav = f"{file_name}_dub.wav"
-                tts_client.generate_dub(
-                    srt_path=srt_lang_path,
-                    server_url=(omnivoice_url or "").strip()
-                    or "http://127.0.0.1:7861",
-                    ref_audio=ref_audio,
-                    ref_text=(ref_text or "").strip() or None,
-                    language=target_language,
-                    num_step=int(dub_num_step),
-                    max_speed=float(dub_max_speed),
-                    hard_sync=True,  # neo cung timeline: khong truot gio
-                    out_wav=tts_wav,
-                )
-                yield upload_if_enabled(tts_wav), None, links_md()
+                from modules import drive as drive_mod
 
-                yield log(
-                    "Tron tieng goc + giong dich roi ghep vao video..."
-                ), None, links_md()
-                dub_video = f"{file_name}_{target_language}_dub{ext}"
-                mix_and_mux(
-                    video_in=output_file,
-                    tts_wav=tts_wav,
-                    output=dub_video,
-                    orig_gain=float(orig_gain),
-                    tts_gain=float(tts_gain),
+                drive_service = drive_mod.build_service(sa_file)
+                drive_job_folder = drive_mod.ensure_job_folder(
+                    drive_service,
+                    (drive_folder_id or "").strip(),
+                    base_name,
                 )
-                final_output = dub_video
-                yield upload_if_enabled(dub_video), None, links_md()
+                log("Da ket noi Google Drive, tao thu muc job xong.")
+                emit()
             except Exception as e:
-                # Long tieng loi -> van giu video co phu de (khong lam hong ket qua).
-                yield log(
-                    f"Canh bao: long tieng that bai ({e}). "
-                    "Giu lai video co phu de (chua long tieng)."
-                ), None, links_md()
-        # ===================================================================
+                drive_service = None
+                log(f"Canh bao: khong ket noi duoc Drive ({e}). Bo qua upload.")
+                emit()
+        else:
+            log("Canh bao: bat Drive nhung chua tai file Service Account JSON. Bo qua upload.")
+            emit()
 
-        # --- Don dep thu muc khung hinh tam neu chon ---
-        if delete_temp and os.path.isdir(temp_directory_path):
-            shutil.rmtree(temp_directory_path, ignore_errors=True)
-            log(f"Da xoa thu muc tam: {temp_directory_path}")
+    def upload_if_enabled(local_path):
+        if drive_service and local_path and os.path.exists(local_path):
+            try:
+                from modules import drive as drive_mod
 
-        yield log("HOAN TAT!"), final_output, links_md()
+                info = drive_mod.upload_file(drive_service, local_path, drive_job_folder)
+                link = info.get("link") or info.get("id")
+                drive_links.append(f"- [{info['name']}]({link})")
+                log(f"Da upload len Drive: {info['name']}")
+            except Exception as e:
+                log(f"Loi upload Drive ({os.path.basename(local_path)}): {e}")
+        emit()
 
-    except Exception as e:
-        err = traceback.format_exc()
-        yield log(f"Loi: {e}\n{err}"), None, ""
+    file_name = os.path.join(work_dir, base_name)
+
+    fps = detect_fps(local_video)
+    log(f"FPS phat hien: {fps}")
+    emit()
+
+    log("Buoc 1/6: tach khung hinh tu video...")
+    emit()
+    extract_frames(local_video, fps)
+    temp_directory_path = get_temp_directory_path(local_video)
+    frame_paths = get_temp_frame_paths(temp_directory_path)
+    log(f"Da tach {len(frame_paths)} khung hinh.")
+    emit()
+
+    log("Buoc 2/6: OCR nhan dien phu de...")
+    emit()
+    ocr_result, y_center = extract_subtitles(
+        frame_paths, config, fps, progress_cb=on_progress
+    )
+    log("OCR hoan tat.")
+    emit()
+
+    log("Buoc 3/6: tao file phu de goc (.srt)...")
+    emit()
+    srt_path = get_subtitles(ocr_result, config, fps, file_name)
+    upload_if_enabled(srt_path)
+
+    log("Buoc 4/6: xoa phu de goc khoi video (STTN)...")
+    emit()
+    remove_subtitles(
+        ocr_result, fps, len(frame_paths), config, progress_cb=on_progress
+    )
+    output_path = f"{file_name}_output{ext}"
+    create_video(local_video, output_path, fps)
+    log("Xoa phu de (STTN) hoan tat.")
+    upload_if_enabled(output_path)
+
+    log("Buoc 5/6: dich phu de (co the mat vai phut)...")
+    emit()
+    srt_lang_path = translate_subtitles(
+        srt_path,
+        target_language,
+        source_lang=source_language,
+        progress_cb=on_progress,
+    )
+    log("Dich phu de hoan tat.")
+    upload_if_enabled(srt_lang_path)
+
+    log("Buoc 6/7: chen phu de da dich vao video...")
+    emit()
+    output_file = f"{file_name}_{target_language}{ext}"
+    embed_subtitles(output_path, srt_lang_path, y_center, output_file, config)
+    upload_if_enabled(output_file)
+
+    final_output = output_file
+    if dub_enable:
+        try:
+            log(
+                "Buoc 7/7: tao giong long tieng bang OmniVoice "
+                f"(service: {omnivoice_url})..."
+            )
+            emit()
+            tts_wav = f"{file_name}_dub.wav"
+            tts_client.generate_dub(
+                srt_path=srt_lang_path,
+                server_url=(omnivoice_url or "").strip() or "http://127.0.0.1:7861",
+                ref_audio=ref_audio,
+                ref_text=(ref_text or "").strip() or None,
+                language=target_language,
+                num_step=int(dub_num_step),
+                max_speed=float(dub_max_speed),
+                hard_sync=True,
+                out_wav=tts_wav,
+            )
+            upload_if_enabled(tts_wav)
+
+            log("Tron tieng goc + giong dich roi ghep vao video...")
+            emit()
+            dub_video = f"{file_name}_{target_language}_dub{ext}"
+            mix_and_mux(
+                video_in=output_file,
+                tts_wav=tts_wav,
+                output=dub_video,
+                orig_gain=float(orig_gain),
+                tts_gain=float(tts_gain),
+            )
+            final_output = dub_video
+            upload_if_enabled(dub_video)
+        except Exception as e:
+            log(
+                f"Canh bao: long tieng that bai ({e}). "
+                "Giu lai video co phu de (chua long tieng)."
+            )
+            emit()
+
+    if delete_temp and os.path.isdir(temp_directory_path):
+        shutil.rmtree(temp_directory_path, ignore_errors=True)
+        log(f"Da xoa thu muc tam: {temp_directory_path}")
+
+    log("HOAN TAT!")
+    emit(final_output)
 
 
 def build_ui():
@@ -345,7 +463,10 @@ def build_ui():
 
                     with gr.Column(scale=1):
                         status_out = gr.Textbox(
-                            label="Nhat ky tien do", lines=18, max_lines=30
+                            label="Nhat ky tien do (cap nhat realtime)",
+                            lines=18,
+                            max_lines=40,
+                            interactive=False,
                         )
                         video_out = gr.Video(label="Video ket qua")
                         links_out = gr.Markdown(label="Link Google Drive")

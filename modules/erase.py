@@ -1,6 +1,6 @@
 import concurrent.futures
 import os
-from typing import List
+from typing import Callable, List, Optional
 
 import cv2
 import numpy as np
@@ -19,6 +19,7 @@ def inpaint_video(
     masks_list: List[Image.Image],
     neighbor_stride: int,
     ckpt_p="./sttn/checkpoints/sttn.pth",
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ):
     """
     对视频帧进行修复。
@@ -41,11 +42,16 @@ def inpaint_video(
 
     results = []
 
-    for paths, frames, masks in tqdm(
-        zip(paths_list, frames_list, masks_list),
-        desc="Inpaint job",
-        total=len(paths_list),
+    total_jobs = len(paths_list)
+    for job_idx, (paths, frames, masks) in enumerate(
+        tqdm(
+            zip(paths_list, frames_list, masks_list),
+            desc="Inpaint job",
+            total=total_jobs,
+        )
     ):
+        if progress_cb:
+            progress_cb(job_idx + 1, total_jobs, "STTN")
         # inference
         result = inpaint_video_with_builded_sttn(
             model, paths, frames, masks, neighbor_stride, device
@@ -182,7 +188,13 @@ def extract_mask(
     return paths_list, frames_list, masks_list
 
 
-def remove_subtitles(ocr_result: dict, fps: float, frame_len: int, config: dict):
+def remove_subtitles(
+    ocr_result: dict,
+    fps: float,
+    frame_len: int,
+    config: dict,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
+):
     """
     移除视频中的字幕。
 
@@ -209,5 +221,6 @@ def remove_subtitles(ocr_result: dict, fps: float, frame_len: int, config: dict)
         masks_list,
         config["erase"]["neighbor_stride"],
         config["erase"]["ckpt_p"],
+        progress_cb=progress_cb,
     )
     inpaint_imag(results)

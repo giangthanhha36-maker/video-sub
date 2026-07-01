@@ -46,6 +46,13 @@ bash Miniconda3-latest-Linux-x86_64.sh
 # dong terminal, mo lai, hoac: source ~/.bashrc
 ```
 
+**Conda 26+** bắt chấp nhận Terms of Service trước khi tạo môi trường. Script `setup_linux_gpu.sh` tự xử lý; nếu chạy `conda create` thủ công và báo lỗi ToS:
+
+```bash
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+```
+
 ---
 
 ## 3. Clone repo và cài môi trường
@@ -58,12 +65,19 @@ chmod +x setup_linux_gpu.sh run_ui.sh run_omnivoice.sh start_linux.sh stop_linux
 ./setup_linux_gpu.sh
 ```
 
-Script `setup_linux_gpu.sh` tự tạo 2 môi trường conda:
+Script `setup_linux_gpu.sh` tự tạo 2 môi trường conda và **ghim phiên bản** Gradio/Paddle/cuDNN để tránh lỗi thường gặp trên Docker.
 
 | Môi trường | Python | Vai trò |
 |------------|--------|---------|
 | `ste` | 3.10 | Pipeline chính + giao diện `app.py` |
 | `omnivoice` | 3.12 | Service lồng tiếng `audio.py` |
+
+**Đã cài rồi nhưng gặp lỗi** (cuDNN, Gradio, Cython…)? Chạy sửa nhanh:
+
+```bash
+./scripts/fix_ste_env.sh
+./stop_linux.sh && ./start_linux.sh --share
+```
 
 > Card **50-series** (RTX 5090…): nếu setup báo lỗi Paddle, xem **CASE B** trong [index.md](index.md) mục 4 và cài lại torch/paddle thủ công trong env `ste`.
 
@@ -240,7 +254,9 @@ conda deactivate
 | Lồng tiếng báo lỗi kết nối | `curl http://127.0.0.1:7861` trên server; chạy lại `./run_omnivoice.sh` |
 | `Model loaded.` không xuất hiện | Xem `logs/omnivoice.log`; thiếu VRAM → tắt service khác hoặc `OMNIVOICE_NO_ASR=1 ./run_omnivoice.sh` |
 | MoviePy / ImageMagick lỗi | `sudo apt install imagemagick`; đảm bảo `magick` hoặc `convert` trong PATH |
-| OCR/Paddle lỗi GPU | Xem [index.md](index.md) CASE A/B; card 50-series cần paddle cu129 |
+| OCR/Paddle lỗi GPU / `libcudnn.so` | Chạy `./scripts/fix_ste_env.sh`; hoặc xem [index.md](index.md) CASE A/B |
+| `CondaToSNonInteractiveError` | `conda tos accept` (xem mục 2) hoặc chạy lại `./setup_linux_gpu.sh` |
+| Gradio `HfFolder` / `pydantic` / `jinja2` | Chạy `./scripts/fix_ste_env.sh` (đã ghim trong `requirements-ui.txt`) |
 
 ---
 

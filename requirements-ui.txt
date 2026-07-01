@@ -5,6 +5,19 @@ gradio==4.44.1
 # CODE MOI: client de goi sang service OmniVoice (audio.py) tao long tieng.
 # gradio_client di kem ban gradio 4.44.x de tuong thich API.
 gradio_client==1.3.0
+# Gradio 4.44.x import HfFolder tu huggingface_hub; ban 1.0+ da xoa -> loi khoi dong UI.
+huggingface_hub<1.0
+# Pydantic 2.11+ sinh schema additionalProperties: true (bool) -> gradio_client 1.3.0 crash.
+pydantic==2.10.6
+# Gradio 4.44.x dung TemplateResponse(name, context); Starlette 1.0 doi API -> loi jinja2.
+starlette==0.41.3
+fastapi==0.115.6
+# Tranh loi Cython/zlib hong khi import paddle (setuptools keo Cython).
+setuptools>=69,<76
+Cython>=3.0,<4
+# Paddle 2.6 (CASE A) can cuDNN 8.9 — script setup tu cai, ghi o day de tham chieu.
+# nvidia-cudnn-cu12==8.9.7.29
+# nvidia-cublas-cu12
 google-api-python-client==2.149.0
 google-auth==2.35.0
 google-auth-httplib2==0.2.0

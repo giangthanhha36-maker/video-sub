@@ -1,6 +1,7 @@
 import os
 import re  # [THAY DOI - CHUNK] tach dong "N. noi dung" trong ket qua dich
 import time
+from typing import Callable, Optional
 
 import pysrt
 
@@ -116,6 +117,7 @@ def translate_subtitles(
     try_times: int = 5,
     source_lang: str = "Chinese",
     chunk_size: int = 40,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ):
     """
     将字幕翻译成目标语言并保存。
@@ -178,6 +180,8 @@ def translate_subtitles(
 
     for start in range(0, len(items), chunk_size):
         chunk_index = start // chunk_size + 1
+        if progress_cb:
+            progress_cb(chunk_index, total_chunks, "Dich")
         group = items[start : start + chunk_size]
         # Gop text moi dong (gop xuong dong trong 1 phu de thanh dau cach de de danh so)
         src_texts = [it.text.strip().replace("\n", " ") for it in group]

@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import List
+from typing import Callable, List, Optional
 
 import numpy as np
 from paddleocr import PaddleOCR
@@ -13,7 +13,12 @@ logging.disable(logging.DEBUG)
 logging.disable(logging.WARNING)
 
 
-def extract_subtitles(frame_paths: List[str], config: dict, fps: float):
+def extract_subtitles(
+    frame_paths: List[str],
+    config: dict,
+    fps: float,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
+):
     """
     从视频帧中提取字幕。
 
@@ -59,7 +64,7 @@ def extract_subtitles(frame_paths: List[str], config: dict, fps: float):
         det_model_dir=config["ocr"]["det_model_dir"],
         rec_model_dir=config["ocr"]["rec_model_dir"],
     )
-    ocr_result = get_ocr_result(ocr, frame_paths, config)
+    ocr_result = get_ocr_result(ocr, frame_paths, config, progress_cb=progress_cb)
     save_ocr_result(ocr_result, f"{file_name}_ocr.json")
 
     ocr_result, center = check_ocr_result(ocr_result, config, fps, frame_paths[0])
@@ -170,7 +175,12 @@ def sort_ocr_result(ocr_result: List[List]):
     return sorted_ocr_result
 
 
-def get_ocr_result(ocr: PaddleOCR, frame_paths: List[str], config: dict):
+def get_ocr_result(
+    ocr: PaddleOCR,
+    frame_paths: List[str],
+    config: dict,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None,
+):
     """
     对一系列图像帧进行OCR识别，提取并整理文本信息及其在图像中的位置。
 
@@ -187,7 +197,11 @@ def get_ocr_result(ocr: PaddleOCR, frame_paths: List[str], config: dict):
     max_height = int(img_array.shape[0] * config["ocr"]["max_height_ratio"])
 
     ocr_result = {}
-    for frame_path in tqdm(frame_paths, desc="OCR"):
+    total = len(frame_paths)
+    step = max(1, total // 40) if total else 1
+    for i, frame_path in enumerate(tqdm(frame_paths, desc="OCR")):
+        if progress_cb and (i % step == 0 or i == total - 1):
+            progress_cb(i + 1, total, "OCR")
         img_array = load_img_to_array(frame_path)
         results = ocr.ocr(img_array[min_height:max_height, :, :], cls=False, det=True, rec=True)
         result = results[0]

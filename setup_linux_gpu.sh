@@ -6,6 +6,9 @@
 #   chmod +x setup_linux_gpu.sh
 #   ./setup_linux_gpu.sh
 #
+# Sua moi truong ste da cai (khong tao lai env):
+#   ./scripts/fix_ste_env.sh
+#
 # Script tao 2 moi truong conda:
 #   ste        - pipeline chinh (OCR, xoa phu de, dich, UI)
 #   omnivoice  - long tieng OmniVoice (service rieng)
@@ -19,6 +22,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+
+# shellcheck source=scripts/ste_gpu_env.sh
+source "${SCRIPT_DIR}/scripts/ste_gpu_env.sh"
 
 echo "=========================================="
 echo " Setup SubErase-Translate-Embed (Linux GPU)"
@@ -39,6 +45,13 @@ if ! command -v conda &>/dev/null; then
     echo "  bash Miniconda3-latest-Linux-x86_64.sh"
     exit 1
 fi
+
+# --- Conda 26+ yeu cau chap nhan Terms of Service truoc khi conda create ---
+echo ">>> Chap nhan Conda Terms of Service (neu can)..."
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null \
+    || echo "      (bo qua — da chap nhan hoac conda cu hon)"
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null \
+    || true
 
 # --- Kiem tra ffmpeg ---
 if ! command -v ffmpeg &>/dev/null; then
@@ -73,20 +86,44 @@ fi
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate ste
 
+echo ">>> Cai setuptools + Cython (tranh loi zlib/Cython hong khi import paddle)..."
+pip install --no-cache-dir "setuptools>=69,<76" "Cython>=3.0,<4"
+
 echo ">>> Cai PyTorch + PaddlePaddle (GPU)..."
 if [ "$USE_CASE_B" -eq 1 ]; then
-    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu129
-    pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu129/ \
-        || echo "[CANH BAO] Paddle cu129 that bai - xem LINUX_SERVER.md CASE B"
+    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu129
+    pip install --no-cache-dir paddlepaddle-gpu==3.0.0 \
+        -i https://www.paddlepaddle.org.cn/packages/stable/cu129/ \
+        || { echo "[LOI] Paddle cu129 that bai — xem index.md CASE B"; exit 1; }
+    echo ">>> Cai NVIDIA cuDNN/cuBLAS (CASE B — cuDNN 9.x)..."
+    pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
 else
-    pip install torch==2.5.0 torchvision==0.20.0 --index-url https://download.pytorch.org/whl/cu121
-    python -m pip install paddlepaddle-gpu==2.6.1.post120 \
+    pip install --no-cache-dir torch==2.5.0 torchvision==0.20.0 \
+        --index-url https://download.pytorch.org/whl/cu121
+    pip install --no-cache-dir paddlepaddle-gpu==2.6.1.post120 \
         -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html
+    echo ">>> Cai NVIDIA cuDNN/cuBLAS (CASE A — cuDNN 8.9 cho Paddle 2.6)..."
+    pip install --no-cache-dir "nvidia-cudnn-cu12==8.9.7.29" nvidia-cublas-cu12 \
+        || pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
 fi
 
-echo ">>> Cai requirements chinh + UI..."
-pip install -r requirements.txt
-pip install -r requirements-ui.txt
+echo ">>> Link cuDNN + LD_LIBRARY_PATH cho Paddle (Docker/Linux)..."
+ste_gpu_prepare_env
+
+echo ">>> Kiem tra Paddle GPU (bat buoc)..."
+if ! ste_gpu_verify_paddle; then
+    echo "[LOI] paddle.utils.run_check() that bai."
+    echo "      Thu chay: ./scripts/fix_ste_env.sh"
+    exit 1
+fi
+echo "[OK] Paddle GPU hoat dong."
+
+echo ">>> Cai requirements chinh + UI (da ghim phien ban Gradio/UI)..."
+pip install --no-cache-dir -r requirements.txt
+pip install --no-cache-dir -r requirements-ui.txt
+
+echo ">>> Kiem tra Gradio UI..."
+python -c "import gradio; print('[OK] gradio', gradio.__version__)"
 
 conda deactivate
 
@@ -104,9 +141,9 @@ fi
 conda activate omnivoice
 
 echo ">>> Cai torch cu128 + OmniVoice..."
-pip install torch==2.8.0+cu128 torchaudio==2.8.0+cu128 torchvision==0.23.0+cu128 \
+pip install --no-cache-dir torch==2.8.0+cu128 torchaudio==2.8.0+cu128 torchvision==0.23.0+cu128 \
     --extra-index-url https://download.pytorch.org/whl/cu128
-pip install -r requirements-omnivoice.txt
+pip install --no-cache-dir -r requirements-omnivoice.txt
 
 conda deactivate
 
@@ -118,7 +155,8 @@ if [ ! -f config.yaml ]; then
     echo "[OK] Da tao config.yaml tu template. Hay dien API key dich."
 fi
 
-chmod +x run_ui.sh run_omnivoice.sh start_linux.sh stop_linux.sh setup_linux_gpu.sh 2>/dev/null || true
+chmod +x run_ui.sh run_omnivoice.sh start_linux.sh stop_linux.sh setup_linux_gpu.sh \
+    scripts/fix_ste_env.sh 2>/dev/null || true
 
 echo ""
 echo "=========================================="
@@ -127,7 +165,7 @@ echo "=========================================="
 echo " Buoc tiep theo:"
 echo "   1. Tai models/ (OCR + sttn.pth) - xem LINUX_SERVER.md muc 4"
 echo "   2. Sua config.yaml (API key dich)"
-echo "   3. chmod +x *.sh && ./start_linux.sh"
+echo "   3. ./start_linux.sh"
 echo ""
 echo " CONG PUBLIC (giao dien web): 7860"
 echo " CONG NOI BO (OmniVoice):      7861 (khong mo firewall)"
