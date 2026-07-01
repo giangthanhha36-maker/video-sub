@@ -102,8 +102,8 @@ else
         --index-url https://download.pytorch.org/whl/cu121
     pip install --no-cache-dir paddlepaddle-gpu==2.6.1.post120 \
         -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html
-    echo ">>> Cai NVIDIA cuDNN/cuBLAS (cuDNN 9.x — torch + paddle CASE A)..."
-    pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
+    echo ">>> Cai NVIDIA cuDNN/cuBLAS (torch 2.5 cu121 can cudnn == 9.1.0.70)..."
+    pip install --no-cache-dir "nvidia-cudnn-cu12==9.1.0.70" nvidia-cublas-cu12
 fi
 
 echo ">>> Link cuDNN + LD_LIBRARY_PATH cho Paddle (Docker/Linux)..."

@@ -19,8 +19,8 @@ echo ">>> [1/4] Sua setuptools + Cython (neu bi hong)..."
 pip cache purge 2>/dev/null || true
 pip install --no-cache-dir "setuptools>=69,<76" "Cython>=3.0,<4"
 
-echo ">>> [2/4] Cai NVIDIA cuDNN/cuBLAS (cuDNN 9.x — dung cho CA torch va paddle)..."
-pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
+echo ">>> [2/4] Cai NVIDIA cuDNN/cuBLAS (torch 2.5 cu121 can cudnn == 9.1.0.70)..."
+pip install --no-cache-dir "nvidia-cudnn-cu12==9.1.0.70" nvidia-cublas-cu12
 
 echo ">>> [3/4] Sua phien ban Gradio/UI dependencies..."
 pip install --no-cache-dir -r requirements-ui.txt
