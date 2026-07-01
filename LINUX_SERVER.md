@@ -255,6 +255,7 @@ conda deactivate
 | `Model loaded.` không xuất hiện | Xem `logs/omnivoice.log`; thiếu VRAM → tắt service khác hoặc `OMNIVOICE_NO_ASR=1 ./run_omnivoice.sh` |
 | MoviePy / ImageMagick lỗi | `sudo apt install imagemagick`; đảm bảo `magick` hoặc `convert` trong PATH |
 | OCR/Paddle lỗi GPU / `libcudnn.so` | Chạy `./scripts/fix_ste_env.sh`; hoặc xem [index.md](index.md) CASE A/B |
+| `Out of memory` / `ResourceExhaustedError` GPU | OmniVoice + OCR cùng GPU 0 → restart: `./stop_linux.sh && ./start_linux.sh` (tự tách GPU 1 cho OmniVoice nếu có 2 card); hoặc tắt lồng tiếng khi xử lý |
 | `CondaToSNonInteractiveError` | `conda tos accept` (xem mục 2) hoặc chạy lại `./setup_linux_gpu.sh` |
 | Gradio `HfFolder` / `pydantic` / `jinja2` | Chạy `./scripts/fix_ste_env.sh` (đã ghim trong `requirements-ui.txt`) |
 

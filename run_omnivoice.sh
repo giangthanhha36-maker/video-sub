@@ -19,6 +19,20 @@ OMNIVOICE_MODEL="${OMNIVOICE_MODEL:-k2-fsa/OmniVoice}"
 # Dat OMNIVOICE_NO_ASR=1 neu LUON nhap san Reference Text -> nhe VRAM, khoi dong nhanh
 OMNIVOICE_NO_ASR="${OMNIVOICE_NO_ASR:-0}"
 
+# Server 2 GPU: OmniVoice nen chay GPU 1 de tranh tranh VRAM voi Paddle/STTN (GPU 0).
+# Tu dong: neu co >= 2 GPU va khong set OMNIVOICE_CUDA_DEVICE -> dung GPU 1.
+if [ -z "${OMNIVOICE_CUDA_DEVICE:-}" ] && command -v nvidia-smi &>/dev/null; then
+    _GPU_COUNT="$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${_GPU_COUNT:-0}" -ge 2 ]; then
+        OMNIVOICE_CUDA_DEVICE=1
+        echo "[INFO] Phat hien ${_GPU_COUNT} GPU -> OmniVoice dung GPU ${OMNIVOICE_CUDA_DEVICE}"
+    else
+        OMNIVOICE_CUDA_DEVICE=0
+    fi
+fi
+OMNIVOICE_CUDA_DEVICE="${OMNIVOICE_CUDA_DEVICE:-0}"
+export CUDA_VISIBLE_DEVICES="${OMNIVOICE_CUDA_DEVICE}"
+
 if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
     # shellcheck source=/dev/null
     source "$HOME/miniconda3/etc/profile.d/conda.sh"
@@ -42,6 +56,7 @@ fi
 
 echo "=========================================="
 echo " OmniVoice service (audio.py)"
+echo " GPU: ${OMNIVOICE_CUDA_DEVICE} (CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES})"
 echo " Cong NOI BO: ${OMNIVOICE_PORT} (chi localhost)"
 echo " Doi den khi thay: Model loaded."
 echo "=========================================="

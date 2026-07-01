@@ -39,6 +39,14 @@ fi
 
 conda activate ste
 
+# Pipeline chinh (Paddle OCR + STTN) uu tien GPU 0 khi server co nhieu GPU.
+if [ -z "${STE_CUDA_DEVICE:-}" ] && command -v nvidia-smi &>/dev/null; then
+    STE_CUDA_DEVICE=0
+fi
+if [ -n "${STE_CUDA_DEVICE:-}" ]; then
+    export CUDA_VISIBLE_DEVICES="${STE_CUDA_DEVICE}"
+fi
+
 # Paddle GPU (OCR): link libcudnn + LD_LIBRARY_PATH (Docker/Linux headless).
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/scripts/ste_gpu_env.sh"
