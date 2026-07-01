@@ -1,0 +1,10 @@
+# Thu vien bo sung cho giao dien Gradio + tich hop Google Drive
+# Cai sau khi da cai xong moi truong chinh (torch/paddle/...)
+#   pip install -r requirements-ui.txt
+gradio==4.44.1
+# CODE MOI: client de goi sang service OmniVoice (audio.py) tao long tieng.
+# gradio_client di kem ban gradio 4.44.x de tuong thich API.
+gradio_client==1.3.0
+google-api-python-client==2.149.0
+google-auth==2.35.0
+google-auth-httplib2==0.2.0

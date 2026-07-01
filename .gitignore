@@ -1,0 +1,17 @@
+*/__pycache__/
+config.yaml
+models/
+
+# Thong tin nhay cam - KHONG commit
+service_account*.json
+token*.json
+.env
+
+# File tam cua Gradio
+flagged/
+gradio_cached_examples/
+.gradio/
+
+# Linux headless: log va PID khi chay start_linux.sh
+logs/
+.pids/

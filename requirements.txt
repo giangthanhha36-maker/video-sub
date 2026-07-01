@@ -1,0 +1,14 @@
+matplotlib==3.10.0
+moviepy==2.1.2
+openai==1.60.0
+opencv_python_headless==4.11.0.86
+paddleocr==2.9.1
+pysrt==1.1.2
+PyYAML==6.0.2
+# === THAY DOI: torch/torchvision duoc CAI RIENG theo dong card GPU (xem index.md muc 4) ===
+# Ly do: ghim torch==2.5.0 o day se cai DE len ban GPU (vi du ban cu128 cho card 50-series),
+#        khien GPU khong dung duoc. Vi vay COMMENT lai 2 dong nay (khong xoa).
+#        Hay cai torch/torchvision GPU TRUOC, roi moi chay: pip install -r requirements.txt
+# torch==2.5.0
+# torchvision==0.20.0
+tqdm==4.67.1

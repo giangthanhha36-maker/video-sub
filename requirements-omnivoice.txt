@@ -1,0 +1,17 @@
+# ===========================================================================
+# Moi truong RIENG cho OmniVoice (long tieng). Python 3.12 + CUDA 12.8.
+#
+# QUAN TRONG ve thu tu: cai torch GPU TRUOC, roi moi cai file nay.
+#   conda create -n omnivoice python=3.12 -y
+#   conda activate omnivoice
+#   pip install torch==2.8.0+cu128 torchaudio==2.8.0+cu128 torchvision==0.23.0+cu128 \
+#       --extra-index-url https://download.pytorch.org/whl/cu128
+#   pip install -r requirements-omnivoice.txt
+# ===========================================================================
+omnivoice
+gradio
+numpy
+pysrt
+# librosa + soundfile: dung cho che do "hard sync" (co/gian audio cho khop timeline)
+librosa
+soundfile

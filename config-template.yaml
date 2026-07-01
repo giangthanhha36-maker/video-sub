@@ -1,0 +1,60 @@
+# 视频文件相关配置
+video:
+  width_delta: 0.05 # 宽度冗余
+  height_delta: 0.02 # 高度冗余
+  groups_tolerance: 20 # 允许的组内差值，计算字幕中心和高度用
+  min_duration: 0.1 # 最小字幕持续时间，单位秒
+
+# OCR 识别配置
+ocr:
+  lang: "ch" # OCR 识别语言
+  det_model_dir: "./models/ch_PP-OCRv4_det_server_infer" # OCR 检测模型
+  rec_model_dir: "./models/ch_PP-OCRv4_rec_server_infer" # OCR 识别模型
+  min_height_ratio: 0.0 # 检测字幕的最小高度占比
+  max_height_ratio: 1.0 # 检测字幕的最大高度占比
+
+# 字幕擦除配置
+erase:
+  ckpt_p: "./models/sttn.pth" # STTN 模型
+  max_frame_length: 100 # 单次处理帧最大长度
+  min_frame_length: 30 # 单次处理帧最小长度
+  mask_expand: 20 # 掩膜外扩的像素数。
+  neighbor_stride: 10 # 邻居帧步长
+
+# 字幕翻译配置
+translation:
+  model: "gpt-4o-mini"
+  api_key: "sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+  api_base_url: "https://api.openai.com/v1"
+
+# 字幕处理配置
+subtitle:
+  font: "./fonts/arialbd.ttf" # 字幕字体
+  font_size: 20 # 翻译后字幕的字体大小，如24，为0则使用理论计算大小
+  font_color: "#FFFFFF" # 字幕字体颜色，例如白色
+  position: 0 # 字幕位置，高度的百分比，例如0.66，为0则为原字幕位置
+  width_ratio: 0.8 # 字幕宽度与视频宽度的比例，用于计算字体大小
+
+# 视频输出配置
+output:
+  target_size: 30 # 输出视频大小，单位MB
+
+# Google Drive (luu file ket qua) - secrets nhap o tab Cai dat cua giao dien, KHONG dat o day
+drive:
+  enable: true # bat/tat upload len Google Drive
+  folder_id: "" # ID thu muc Drive da share cho email service account (nen dung Shared Drive)
+
+# CODE MOI: Cau hinh long tieng (TTS + voice clone) bang OmniVoice.
+# OmniVoice chay o moi truong rieng (audio.py), giao dien goi sang qua API.
+tts:
+  server_url: "http://127.0.0.1:7861" # dia chi service OmniVoice (audio.py)
+  num_step: 32 # so buoc khu nhieu: cao hon = hay hon nhung cham hon
+  max_speed: 1.3 # gioi han tang toc cau dai (chong meo tieng)
+  hard_sync: true # neo cung timeline -> KHONG truot gio so voi video
+
+# CODE MOI: Cau hinh tron audio goc + giong dich roi ghep vao video.
+dub:
+  enable: true # bat/tat buoc long tieng
+  orig_gain: 0.3 # am luong tieng goc giu lai (0.3 = 30%)
+  tts_gain: 0.7 # am luong giong dich (0.7 = 70%)
+
