@@ -33,10 +33,11 @@ ste_gpu_link_cudnn() {
     fi
 
     local cudnn_so=""
+    # uu tien .so.9 vi torch cu121 can libcudnn.so.9
     for candidate in \
-        "${cudnn_lib}/libcudnn.so" \
+        "${cudnn_lib}/libcudnn.so.9" \
         "${cudnn_lib}/libcudnn.so.8" \
-        "${cudnn_lib}/libcudnn.so.9"
+        "${cudnn_lib}/libcudnn.so"
     do
         if [ -e "$candidate" ]; then
             cudnn_so="$candidate"
@@ -52,6 +53,14 @@ ste_gpu_link_cudnn() {
     fi
 
     ln -sf "$cudnn_so" "${cudnn_lib}/libcudnn.so"
+
+    local torch_lib="${site}/torch/lib"
+    if [ -d "$torch_lib" ]; then
+        for f in "${cudnn_lib}"/libcudnn*.so*; do
+            [ -e "$f" ] || continue
+            ln -sf "$f" "${torch_lib}/$(basename "$f")"
+        done
+    fi
 
     mkdir -p /usr/local/cuda/lib64
     ln -sf "$cudnn_so" /usr/local/cuda/lib64/libcudnn.so

@@ -102,9 +102,8 @@ else
         --index-url https://download.pytorch.org/whl/cu121
     pip install --no-cache-dir paddlepaddle-gpu==2.6.1.post120 \
         -f https://www.paddlepaddle.org.cn/whl/linux/mkl/avx/stable.html
-    echo ">>> Cai NVIDIA cuDNN/cuBLAS (CASE A — cuDNN 8.9 cho Paddle 2.6)..."
-    pip install --no-cache-dir "nvidia-cudnn-cu12==8.9.7.29" nvidia-cublas-cu12 \
-        || pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
+    echo ">>> Cai NVIDIA cuDNN/cuBLAS (cuDNN 9.x — torch + paddle CASE A)..."
+    pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
 fi
 
 echo ">>> Link cuDNN + LD_LIBRARY_PATH cho Paddle (Docker/Linux)..."
@@ -117,6 +116,7 @@ if ! ste_gpu_verify_paddle; then
     exit 1
 fi
 echo "[OK] Paddle GPU hoat dong."
+python -c "import torch; print('[OK] torch', torch.__version__, 'cuda', torch.cuda.is_available())"
 
 echo ">>> Cai requirements chinh + UI (da ghim phien ban Gradio/UI)..."
 pip install --no-cache-dir -r requirements.txt

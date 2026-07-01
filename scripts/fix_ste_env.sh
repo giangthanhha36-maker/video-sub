@@ -19,24 +19,17 @@ echo ">>> [1/4] Sua setuptools + Cython (neu bi hong)..."
 pip cache purge 2>/dev/null || true
 pip install --no-cache-dir "setuptools>=69,<76" "Cython>=3.0,<4"
 
-echo ">>> [2/4] Sua NVIDIA cuDNN/cuBLAS cho Paddle..."
-PADDLE_VER="$(python -c "import paddle; print(paddle.__version__)" 2>/dev/null || echo "0")"
-if echo "$PADDLE_VER" | grep -qE '^3\.'; then
-    echo "      Paddle ${PADDLE_VER} (CASE B) -> cuDNN 9.x"
-    pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
-else
-    echo "      Paddle ${PADDLE_VER} (CASE A) -> cuDNN 8.9"
-    pip install --no-cache-dir "nvidia-cudnn-cu12==8.9.7.29" nvidia-cublas-cu12 \
-        || pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
-fi
+echo ">>> [2/4] Cai NVIDIA cuDNN/cuBLAS (cuDNN 9.x — dung cho CA torch va paddle)..."
+pip install --no-cache-dir nvidia-cudnn-cu12 nvidia-cublas-cu12
 
 echo ">>> [3/4] Sua phien ban Gradio/UI dependencies..."
 pip install --no-cache-dir -r requirements-ui.txt
 
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/scripts/ste_gpu_env.sh"
-echo ">>> [4/4] Link cuDNN + kiem tra Paddle GPU..."
+echo ">>> [4/4] Link cuDNN + kiem tra torch + paddle GPU..."
 ste_gpu_prepare_env
+python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
 python -c "import paddle; paddle.utils.run_check()"
 python -c "import gradio; print('gradio', gradio.__version__, 'OK')"
 

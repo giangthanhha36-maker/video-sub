@@ -15,9 +15,7 @@ fastapi==0.115.6
 # Tranh loi Cython/zlib hong khi import paddle (setuptools keo Cython).
 setuptools>=69,<76
 Cython>=3.0,<4
-# Paddle 2.6 (CASE A) can cuDNN 8.9 — script setup tu cai, ghi o day de tham chieu.
-# nvidia-cudnn-cu12==8.9.7.29
-# nvidia-cublas-cu12
+# cuDNN 9.x (pip nvidia-cudnn-cu12) — dung chung cho torch + paddle; setup tu cai.
 google-api-python-client==2.149.0
 google-auth==2.35.0
 google-auth-httplib2==0.2.0
